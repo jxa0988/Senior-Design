@@ -57,6 +57,7 @@ jobs:
 
       - name: Run tests
         run: |
+          cd backend
           uv run pytest -q
 
 
