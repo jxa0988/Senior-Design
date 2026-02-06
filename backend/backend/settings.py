@@ -101,9 +101,12 @@ SESSION_COOKIE_SECURE = False if DEBUG else True
 CSRF_COOKIE_SAMESITE = "Lax" if DEBUG else "None"
 SESSION_COOKIE_SAMESITE = "Lax" if DEBUG else "None"
 
-CSRF_TRUSTED_ORIGINS = os.getenv(
-    "CSRF_TRUSTED_ORIGINS", "localhost,127.0.0.1"
-).split(",")
+CSRF_TRUSTED_ORIGINS = [
+    o.strip() for o in os.getenv(
+        "CSRF_TRUSTED_ORIGINS",
+        "http://localhost,http://127.0.0.1"
+    ).split(",") if o.strip()
+]
 
 if not DEBUG:
     USE_X_FORWARDED_HOST = True
