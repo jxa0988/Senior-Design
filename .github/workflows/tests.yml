@@ -29,6 +29,12 @@ jobs:
       GOOGLE_REDIRECT_URI: "http://localhost:8000"
       SECRET_KEY: "ci-not-a-real-secret-key-change-me"
 
+      DB_NAME: test_db
+      DB_USER: postgres
+      DB_PASS: postgres
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+
     steps:
       - uses: actions/checkout@v4
 
@@ -50,3 +56,6 @@ jobs:
         run: |
           cd backend
           uv run pytest -q
+
+
+
