@@ -24,9 +24,9 @@ jobs:
           --health-retries=5
 
     env:
-      # If your Django reads DATABASE_URL, this is the simplest:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
-      DJANGO_SETTINGS_MODULE: backend.settings
+      GOOGLE_CLIENT_ID: "ci-dummy-google-client-id"
+      GOOGLE_CLIENT_SECRET: "ci-dummy-google-client-secret"
+      GOOGLE_REDIRECT_URI: "http://localhost:8000"
 
     steps:
       - uses: actions/checkout@v4
