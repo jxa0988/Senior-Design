@@ -47,6 +47,9 @@ jobs:
           python -m pip install --upgrade pip uv
           uv sync --dev
 
+      - name: Ensure pytest is installed
+        run: uv pip install pytest pytest-django
+
       - name: Run migrations
         run: |
           cd backend
