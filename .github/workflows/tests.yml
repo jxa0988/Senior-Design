@@ -43,9 +43,9 @@ jobs:
       - name: Run migrations
         run: |
           cd backend
-          python manage.py migrate --noinput
+          uv run python manage.py migrate --noinput
 
       - name: Run tests
         run: |
           cd backend
-          pytest -q
+          uv run pytest -q
