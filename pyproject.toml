@@ -19,7 +19,8 @@ dependencies = [
     "google-auth>=2.43.0",
     # ONNX GPU inference
     "onnx>=1.19.1",
-    "onnxruntime-gpu>=1.23.2",
+    "onnxruntime-gpu>=1.23.2; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "onnxruntime>=1.19.1; sys_platform != 'linux' or platform_machine != 'x86_64'",
     # Image processing
     "opencv-python-headless>=4.10.0",
     "pillow>=11.0",
