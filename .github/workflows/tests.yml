@@ -78,16 +78,7 @@ jobs:
           name: coverage-xml
           path: backend/coverage.xml
 
-  docker_build:
-    runs-on: ubuntu-latest
-    needs: test
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build Docker image (no push)
-        run: |
-          docker build -t senior-design-backend:ci .
+  
 
 
 
