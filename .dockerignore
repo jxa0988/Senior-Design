@@ -77,3 +77,13 @@ RF-DETR-model_modified/rf-detr-modifications/**/*.png
 node_modules/
 dist/
 build/
+
+
+# Tests (don’t ship in production image)
+backend/test_*.py
+backend/pytest.ini
+backend/conftest.py
+backend/**/__pycache__/
+backend/.pytest_cache/
+backend/.coverage
+backend/htmlcov/
