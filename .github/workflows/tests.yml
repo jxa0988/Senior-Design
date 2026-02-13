@@ -5,6 +5,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -53,32 +57,48 @@ jobs:
           cd backend
           uv run python manage.py migrate --noinput
 
-      - name: Run tests (JUNit + Coverage)
+      - name: Run tests (JUnit + Coverage)
         run: |
           cd backend
-          uv run pytest -vv --junitxml=report.xml --cov=core --cov-report=xml:coverage.xml
+          uv run pytest -vv \
+            --junitxml=report.xml \
+            --cov=core \
+            --cov-report=xml:coverage.xml \
+            --cov-report=html:htmlcov
 
       - name: Publish test results to GitHub
+        uses: dorny/test-reporter@v1
         if: always()
-        uses: EnricoMi/publish-unit-test-result-action@v2
         with:
-          files: backend/report.xml
+          name: Django Tests
+          path: backend/report.xml
+          reporter: java-junit
 
-      - name: Upload test report
+      - name: Upload JUnit report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: junit-report
           path: backend/report.xml
 
-      - name: Upload coverage report
+      - name: Upload coverage XML
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-xml
           path: backend/coverage.xml
 
-  
+      - name: Upload HTML coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: html-coverage
+          path: backend/htmlcov/
 
-
-
+      # Optional: Codecov (may require a token for private repos)
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          files: backend/coverage.xml
+          # token: ${{ secrets.CODECOV_TOKEN }}
