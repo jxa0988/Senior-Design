@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from datetime import timedelta
 from pathlib import Path
 import os
+import sys
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -170,8 +171,18 @@ WSGI_APPLICATION = "backend.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+RUNNING_TESTS = any("pytest" in arg for arg in sys.argv)
+
 DB_NAME = os.getenv("DB_NAME")
-if DB_NAME and DEBUG is False:
+if RUNNING_TESTS:
+    # Always use local sqlite for tests to avoid touching real DB
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "test_db.sqlite3",
+        }
+    }
+elif DB_NAME and DEBUG is False:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
@@ -180,14 +191,10 @@ if DB_NAME and DEBUG is False:
             "PASSWORD": os.getenv("DB_PASS", ""),
             "HOST": os.getenv("DB_HOST", "localhost"),
             "PORT": os.getenv("DB_PORT", "5432"),
-            "OPTIONS": {
-                # Default to "prefer" so local non-SSL works; set DB_SSLMODE=require for Cloud SQL
-                "sslmode": os.getenv("DB_SSLMODE", "prefer"),
-            },
+            "OPTIONS": {"sslmode": os.getenv("DB_SSLMODE", "prefer")},
         }
     }
 else:
-    # SQLite fallback (local dev)
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
