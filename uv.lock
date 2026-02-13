@@ -182,6 +182,24 @@ wheels = [
 ]
 
 [[package]]
+name = "django-phonenumber-field"
+version = "8.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django", version = "5.2.10", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "django", version = "6.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/87/bf/8aa60c9834773b955dff1ddea842e361e8daaf6b0945d5bfc29fc66d53ab/django_phonenumber_field-8.4.0.tar.gz", hash = "sha256:2b83e843dac35eec6a69880a166487235b737a71a1e38c9a52e5ad67d6996083", size = 45512, upload-time = "2025-11-24T15:09:51.904Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8b/a3/f6b85a9246e22cf719752ad83f5e95aa9ba12419b2f9eff70f20d30e55df/django_phonenumber_field-8.4.0-py3-none-any.whl", hash = "sha256:7a1cb3a6456edb54d879f11ffa0acb227ded08c93b587035d0f28093f0e46511", size = 69528, upload-time = "2025-11-24T15:09:45.479Z" },
+]
+
+[package.optional-dependencies]
+phonenumbers = [
+    { name = "phonenumbers" },
+]
+
+[[package]]
 name = "djangorestframework"
 version = "3.16.1"
 source = { registry = "https://pypi.org/simple" }
@@ -630,6 +648,15 @@ wheels = [
 ]
 
 [[package]]
+name = "phonenumbers"
+version = "9.0.23"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e5/1a/d1a90630b5f5e6ff3918f1ab6958430c051c3f311610780bcd9bc7200a5d/phonenumbers-9.0.23.tar.gz", hash = "sha256:e5aa44844684ffb4928f25a7b8c31dbf6e3763138cb13edd2ab03bf6d4803d98", size = 2298342, upload-time = "2026-02-04T15:58:16.916Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/06/91/17099726260627a23109abf9590b02f08ff3798e3722d760a1f142d9932d/phonenumbers-9.0.23-py2.py3-none-any.whl", hash = "sha256:f29651fb72ba4d22d2691bb0b432f1d2c93fd49cc7b89aa6c11bd6b0e4167412", size = 2584396, upload-time = "2026-02-04T15:58:13.529Z" },
+]
+
+[[package]]
 name = "pillow"
 version = "12.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1041,6 +1068,7 @@ dependencies = [
     { name = "django", version = "5.2.10", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "django", version = "6.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "django-cors-headers" },
+    { name = "django-phonenumber-field", extra = ["phonenumbers"] },
     { name = "djangorestframework" },
     { name = "djangorestframework-simplejwt" },
     { name = "google-auth" },
@@ -1074,6 +1102,7 @@ research = [
 requires-dist = [
     { name = "django", specifier = ">=5.0" },
     { name = "django-cors-headers", specifier = ">=4.9" },
+    { name = "django-phonenumber-field", extras = ["phonenumbers"], specifier = ">=8.4.0" },
     { name = "djangorestframework", specifier = ">=3.16" },
     { name = "djangorestframework-simplejwt", specifier = ">=5.5" },
     { name = "google-auth", specifier = ">=2.43.0" },
