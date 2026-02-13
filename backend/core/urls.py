@@ -22,4 +22,6 @@ urlpatterns = [
          views.run_prediction, name="run_prediction"),
     path("houses/<int:house_id>/run_prediction/",
          views.run_prediction, name="run_prediction_alt"),
+    path("v1/<int:image_id>/predict/",
+         views.image_prediction, name="image_prediction"),
 ]

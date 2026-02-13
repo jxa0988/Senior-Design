@@ -29,11 +29,11 @@ class RFDETRService:
         # ----------------------------
         # Prefer the local exported_models_cpu copy; otherwise fetch from HF Hub.
         BASE_DIR = Path(__file__).resolve().parent
-        onnx_path = BASE_DIR / "exported_models_cpu" / "inference_model.onnx"
+        onnx_path = Path("exported_models", "inference_model.onnx")
 
         if not onnx_path.exists():
             raise RuntimeError(
-                "No ONNX model found , check docker image copy step."
+                f"No ONNX model found , check docker image copy step., {onnx_path}"
             )
         # Instantiate ONNX-only model
         cls._model = RFDETR_ONNX(str(onnx_path))
@@ -71,7 +71,6 @@ class RFDETRService:
         threshold: float = 0.4,
         tile_size: int = 560,
     ):
-        print("[RFDETRService] Running prediction...")
         model, class_names, _ = cls._load_model()
 
         image_path = (

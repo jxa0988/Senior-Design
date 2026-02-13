@@ -33,11 +33,22 @@ class HouseImageSerializer(serializers.ModelSerializer):
 
 class HouseSerializer(serializers.ModelSerializer):
     images = HouseImageSerializer(many=True, read_only=True)
-
+    roof_type_list = [
+        ("Asphalt Shingles", "Asphalt Shingles"),
+        ("Metal", "Metal"),
+        ("Clay Tiles", "Clay Tiles"),
+        ("Synthetic/Composite", "Synthetic/Composite"),
+        ('Wood shakes', 'Wood shakes'),
+        ("TPO/PVC", "TPO/PVC"),
+        ("Other", "Other"),
+    ]
+    roof_type = serializers.ChoiceField(
+        choices=roof_type_list, allow_blank=False, required=True
+    )
     class Meta:
         model = House
         fields = ["id", "customer", "address",
-                  "description", "created_at", "images"]
+                  "roof_type", "severity", "damage_types", "description", "created_at", "images"]
         read_only_fields = ["id", "created_at", "images"]
 
     def __init__(self, *args, **kwargs):

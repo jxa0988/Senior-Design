@@ -1,7 +1,8 @@
 from django.conf import settings
 from django.db import models
-
-
+from phonenumber_field.modelfields import PhoneNumberField
+# uv run python manage.py graph_models -a -g -o erd.png
+#  to visualize the ERD
 class Customer(models.Model):
     agent = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -9,9 +10,8 @@ class Customer(models.Model):
         related_name="customers"
     )
     name = models.CharField(max_length=255)
-    email = models.EmailField(blank=True, null=True, unique=True)
-    phone = models.CharField(max_length=20, blank=True, null=True)
-    # address = models.CharField(max_length=255, blank=True, null=True)
+    email = models.EmailField(unique=True, default="johndoe@example.com")
+    phone = PhoneNumberField(blank=True, default="+123-456-7890", unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -24,7 +24,10 @@ class House(models.Model):
         on_delete=models.CASCADE,
         related_name="houses"
     )
-    address = models.CharField(max_length=255)
+    address = models.CharField(max_length=255, unique=True)
+    roof_type = models.CharField(max_length=100, blank=True, null=True)
+    severity = models.IntegerField(blank=True, null=True)
+    damage_types = models.JSONField(blank=True, null=True)
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -42,6 +45,7 @@ class HouseImage(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
     predicted_url = models.URLField(blank=True, null=True)
     predicted_at = models.DateTimeField(blank=True, null=True)
+    detections = models.JSONField(blank=True, null=True)
 
     def __str__(self):
         return f"Image for {self.house.address}"

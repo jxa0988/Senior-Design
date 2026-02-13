@@ -25,7 +25,6 @@ from google.auth.transport import requests
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework import viewsets, permissions
-from rest_framework import status
 from .authentication import CookieJWTAuthentication
 
 from .models import AgentCustomerLog, HouseImage, House, Customer
@@ -38,6 +37,63 @@ from .utils import upload_file_to_bucket, upload_local_file_to_bucket, delete_fi
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 User = get_user_model()
+
+
+def _delete_existing_prediction(img):
+    """Remove any prior predicted image from the bucket and clear db fields."""
+    existing_url = getattr(img, "predicted_url", None)
+    bucket_name = os.getenv("BUCKET_NAME")
+
+    if not existing_url or not bucket_name or os.getenv("SKIP_CLOUD_UPLOAD") == "1":
+        return
+
+    try:
+        deleted = delete_file_from_bucket(existing_url, bucket_name)
+        if deleted:
+            img.predicted_url = None
+            img.predicted_at = None
+            img.save(update_fields=["predicted_url", "predicted_at"])
+    except Exception as e:
+        print(f"[WARN] Failed to delete previous prediction from bucket: {e}")
+
+
+def _run_prediction_for_image(img, mode: str, threshold: float, tile_size: int):
+    """Common prediction flow used by both single and batch endpoints."""
+    from .services import RFDETRService
+
+    _delete_existing_prediction(img)
+
+    detections, pred_path = RFDETRService.predict(
+        image_path_or_url=img.image_url,
+        mode=mode,
+        threshold=threshold,
+        tile_size=tile_size,
+    )
+
+    predicted_url = None
+    if pred_path:
+        predicted_url = upload_local_file_to_bucket(
+            pred_path, bucket_name=os.getenv("BUCKET_NAME")
+        )
+
+        img.predicted_url = predicted_url
+        img.predicted_at = timezone.now()
+        img.detections = detections
+        img.save(update_fields=["predicted_url", "predicted_at","detections"])
+
+    try:
+        if pred_path and os.path.exists(pred_path):
+            os.remove(pred_path)
+    except Exception as cleanup_error:
+        print(
+            f"[WARN] Failed to delete temp file {pred_path}: {cleanup_error}")
+
+    return {
+        "image_id": img.id,
+        "original_image": img.image_url,
+        "predicted_image": predicted_url,
+        "detections": detections,
+    }
 
 
 class DebugOrJWTAuthenticated(BasePermission):
@@ -358,11 +414,41 @@ def redirect_404(request, exception):
 
 
 @csrf_exempt
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def image_prediction(request, image_id):
+    """Run RF-DETR inference on a single image by ID.
+
+    Expects the same body parameters as `run_prediction`. This is a lower-level
+    endpoint that can be used for testing or individual image inference.
+    """
+    try:
+        img = HouseImage.objects.get(id=image_id)
+    except HouseImage.DoesNotExist:
+        return Response({"error": "Image not found"}, status=404)
+
+    mode = request.data.get("mode", "normal")
+    threshold = float(request.data.get("threshold", 0.4))
+    tile_size = int(request.data.get("tile_size", 560))
+
+    try:
+        result = _run_prediction_for_image(img, mode, threshold, tile_size)
+        return Response(result)
+    except Exception as e:
+        traceback.print_exc()
+        return Response({
+            "image_id": img.id,
+            "original_image": img.image_url,
+            "error": f"{type(e).__name__}: {e}"
+        }, status=500)
+
+
+@csrf_exempt
 @api_view(["GET", "POST"])
 @permission_classes([AllowAny])
 @authentication_classes([])
 def run_prediction(request, house_id):
-    from .services import RFDETRService
     """Run RF-DETR inference for all images of the given house.
 
     Body (JSON):
@@ -393,41 +479,15 @@ def run_prediction(request, house_id):
     mode = request.data.get("mode", "normal")
     threshold = float(request.data.get("threshold", 0.4))
     tile_size = int(request.data.get("tile_size", 560))
-
+    print(
+        f"[INFO] Running prediction for house {house_id} with mode={mode}, threshold={threshold}, tile_size={tile_size}")
     results = []
 
     for img in house.images.all():
         try:
-            # print(" from view running prediction on image:", img.id, img.image_url)
-            # This function already stores detections internally
-            _, pred_path = RFDETRService.predict(
-                image_path_or_url=img.image_url,
-                mode=mode,
-                threshold=threshold,
-                tile_size=tile_size
+            results.append(
+                _run_prediction_for_image(img, mode, threshold, tile_size)
             )
-
-            predicted_url = None
-            if pred_path:
-                predicted_url = upload_local_file_to_bucket(
-                    pred_path, bucket_name=os.getenv("BUCKET_NAME"))
-
-                img.predicted_url = predicted_url
-                img.predicted_at = timezone.now()
-                img.save()
-            # DELETE the local prediction file after uploading
-            try:
-                if os.path.exists(pred_path):
-                    os.remove(pred_path)
-            except Exception as cleanup_error:
-                print(
-                    f"[WARN] Failed to delete temp file {pred_path}: {cleanup_error}")
-            results.append({
-                "image_id": img.id,
-                "original_image": img.image_url,
-                "predicted_image": predicted_url,
-            })
-
         except Exception as e:
             traceback.print_exc()
             results.append({

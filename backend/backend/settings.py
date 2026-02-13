@@ -114,6 +114,8 @@ if not DEBUG:
 
 
 INSTALLED_APPS = [
+    "phonenumber_field",
+    "phonenumbers",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -121,8 +123,10 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    'django_extensions',
     "core",
     "corsheaders",
+
 ]
 
 MIDDLEWARE = [
@@ -167,7 +171,7 @@ WSGI_APPLICATION = "backend.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 DB_NAME = os.getenv("DB_NAME")
-if DB_NAME:
+if DB_NAME and DEBUG is False:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
