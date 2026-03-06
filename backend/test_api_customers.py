@@ -47,3 +47,6 @@ def test_customers_create_creates_customer_for_logged_in_agent():
 
     assert resp.status_code in (200, 201)
     assert Customer.objects.filter(agent=agent, email="john@example.com").exists()
+
+
+
