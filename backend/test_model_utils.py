@@ -1,8 +1,46 @@
 import numpy as np
 import pytest
+import io
+from PIL import Image
 
 import core.model_utils as mu
 
+# ------------------------------------------------------------
+# Test open_image with a local file
+# Covers lines 30–31
+# ------------------------------------------------------------
+def test_open_image_local(tmp_path):
+
+    img_path = tmp_path / "test.jpg"
+
+    # create a simple image file
+    img = Image.new("RGB", (10, 10))
+    img.save(img_path)
+
+    loaded = mu.open_image(str(img_path))
+
+    assert loaded.size == (10, 10)
+
+
+# ------------------------------------------------------------
+# Test open_image with URL (mocked request)
+# Covers lines 28–29
+# ------------------------------------------------------------
+def test_open_image_url(monkeypatch):
+
+    img = Image.new("RGB", (5, 5))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    buf.seek(0)
+
+    class FakeResponse:
+        content = buf.read()
+
+    monkeypatch.setattr(mu.requests, "get", lambda url: FakeResponse())
+
+    loaded = mu.open_image("https://example.com/image.jpg")
+
+    assert loaded.size == (5, 5)
 
 # ------------------------------------------------------------
 # Test sigmoid function
