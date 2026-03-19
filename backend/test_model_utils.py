@@ -5,10 +5,9 @@ from PIL import Image
 
 import core.model_utils as mu
 
-# ------------------------------------------------------------
+
 # Test open_image with a local file
 # Covers lines 30–31
-# ------------------------------------------------------------
 def test_open_image_local(tmp_path):
 
     img_path = tmp_path / "test.jpg"
@@ -22,10 +21,9 @@ def test_open_image_local(tmp_path):
     assert loaded.size == (10, 10)
 
 
-# ------------------------------------------------------------
+
 # Test open_image with URL (mocked request)
 # Covers lines 28–29
-# ------------------------------------------------------------
 def test_open_image_url(monkeypatch):
 
     img = Image.new("RGB", (5, 5))
@@ -42,10 +40,9 @@ def test_open_image_url(monkeypatch):
 
     assert loaded.size == (5, 5)
 
-# ------------------------------------------------------------
+
 # Test sigmoid function
 # Ensures the mathematical sigmoid behaves correctly
-# ------------------------------------------------------------
 def test_sigmoid_basic():
     x = np.array([0.0])
     y = mu.sigmoid(x)
@@ -55,10 +52,9 @@ def test_sigmoid_basic():
     assert float(y[0]) == pytest.approx(0.5, rel=1e-6)
 
 
-# ------------------------------------------------------------
+
 # Test bounding box conversion
 # Converts center format (cx, cy, w, h) → (xmin, ymin, xmax, ymax)
-# ------------------------------------------------------------
 def test_box_cxcywh_to_xyxyn():
     # Example box
     # cx=10, cy=20, w=4, h=6
@@ -75,10 +71,8 @@ def test_box_cxcywh_to_xyxyn():
     assert out[0].tolist() == pytest.approx([8.0, 17.0, 12.0, 23.0])
 
 
-# ------------------------------------------------------------
 # Test IoU calculation between boxes
 # Ensures overlap and non-overlap cases are handled correctly
-# ------------------------------------------------------------
 def test_iou_xyxy_simple_overlap():
     a = np.array([0.0, 0.0, 2.0, 2.0], dtype=np.float32)
 
@@ -100,10 +94,9 @@ def test_iou_xyxy_simple_overlap():
     assert 0.0 < float(ious[1]) < 1.0
 
 
-# ------------------------------------------------------------
+
 # Test Non-Maximum Suppression (NMS)
 # Ensures overlapping boxes with lower scores are removed
-# ------------------------------------------------------------
 def test_nms_numpy_keeps_best_when_overlap_high():
 
     boxes = np.array([
@@ -120,10 +113,9 @@ def test_nms_numpy_keeps_best_when_overlap_high():
     assert keep.tolist() == [0, 2]
 
 
-# ------------------------------------------------------------
+
 # Edge case: NMS with no boxes
 # Should return an empty array
-# ------------------------------------------------------------
 def test_nms_numpy_empty_returns_empty():
     keep = mu.nms_numpy(
         np.zeros((0, 4), dtype=np.float32),
@@ -134,10 +126,9 @@ def test_nms_numpy_empty_returns_empty():
     assert keep.size == 0
 
 
-# ------------------------------------------------------------
+
 # Test class-wise NMS
 # Ensures suppression happens independently per class
-# ------------------------------------------------------------
 def test_classwise_nms_runs_per_class_and_sorts():
 
     boxes = np.array([
@@ -156,10 +147,9 @@ def test_classwise_nms_runs_per_class_and_sorts():
     assert keep.tolist() == [0, 2]
 
 
-# ------------------------------------------------------------
+
 # Test inference pipeline when model detects nothing
 # Should return (None, None)
-# ------------------------------------------------------------
 def test_run_rfdetr_inference_returns_none_when_no_detections(monkeypatch):
 
     class FakeModel:
@@ -172,10 +162,8 @@ def test_run_rfdetr_inference_returns_none_when_no_detections(monkeypatch):
     assert path is None
 
 
-# ------------------------------------------------------------
 # Test inference pipeline when detections exist
 # Ensures detection dictionary is constructed correctly
-# ------------------------------------------------------------
 def test_run_rfdetr_inference_builds_detection_dict(monkeypatch, tmp_path):
 
     class FakeModel:
@@ -209,3 +197,138 @@ def test_run_rfdetr_inference_builds_detection_dict(monkeypatch, tmp_path):
 
     # Ensure output image path was created
     assert out_path.endswith("_pred.jpg")
+
+def test_open_image_raises_when_file_missing():
+    with pytest.raises(FileNotFoundError, match="does not exist"):
+        mu.open_image("definitely_missing_file.jpg")
+
+def test_rfdetr_onnx_init_sets_input_shape(monkeypatch):
+    class FakeInput:
+        shape = [1, 3, 640, 640]
+
+    class FakeSession:
+        def get_inputs(self):
+            return [FakeInput()]
+
+    monkeypatch.setattr(mu.ort, "InferenceSession", lambda path: FakeSession())
+
+    model = mu.RFDETR_ONNX("fake_model.onnx")
+
+    assert model.input_height == 640
+    assert model.input_width == 640
+    assert isinstance(model.ort_session, FakeSession)
+
+def test_rfdetr_onnx_init_raises_runtime_error(monkeypatch):
+    def fake_session(path):
+        raise Exception("load failed")
+
+    monkeypatch.setattr(mu.ort, "InferenceSession", fake_session)
+
+    with pytest.raises(RuntimeError, match="Failed to load ONNX model"):
+        mu.RFDETR_ONNX("bad_model.onnx")
+
+def test_preprocess_outputs_correct_shape_and_type(monkeypatch):
+    class FakeInput:
+        shape = [1, 3, 64, 64]
+
+    class FakeSession:
+        def get_inputs(self):
+            return [FakeInput()]
+
+    # Mock ONNX session so model initializes
+    monkeypatch.setattr(mu.ort, "InferenceSession", lambda path: FakeSession())
+
+    model = mu.RFDETR_ONNX("fake.onnx")
+
+    # Create a simple image
+    img = Image.new("RGB", (32, 32), color=(255, 0, 0))
+
+    output = model._preprocess(img)
+
+    # Expected shape: (1, 3, H, W)
+    assert output.shape == (1, 3, 64, 64)
+
+    # Ensure correct dtype
+    assert output.dtype == np.float32
+
+def test_post_process_without_masks(monkeypatch):
+    class FakeInput:
+        shape = [1, 3, 64, 64]
+
+    class FakeSession:
+        def get_inputs(self):
+            return [FakeInput()]
+
+    monkeypatch.setattr(mu.ort, "InferenceSession", lambda path: FakeSession())
+    model = mu.RFDETR_ONNX("fake.onnx")
+
+    # 2 boxes in cx, cy, w, h normalized format
+    boxes = np.array([[
+        [0.5, 0.5, 0.4, 0.4],
+        [0.2, 0.2, 0.2, 0.2],
+    ]], dtype=np.float32)
+
+    # logits so sigmoid gives strong scores
+    logits = np.array([[
+        [5.0, 1.0],
+        [4.0, 0.5],
+    ]], dtype=np.float32)
+
+    outputs = [boxes, logits]
+
+    scores, labels, out_boxes, masks = model._post_process(
+        outputs,
+        origin_height=100,
+        origin_width=200,
+        confidence_threshold=0.5,
+        max_number_boxes=300,
+    )
+
+    assert masks is None
+    assert len(scores) == 2
+    assert len(labels) == 2
+    assert out_boxes.shape == (2, 4)
+
+def test_post_process_with_masks(monkeypatch):
+    class FakeInput:
+        shape = [1, 3, 64, 64]
+
+    class FakeSession:
+        def get_inputs(self):
+            return [FakeInput()]
+
+    monkeypatch.setattr(mu.ort, "InferenceSession", lambda path: FakeSession())
+    model = mu.RFDETR_ONNX("fake.onnx")
+
+    boxes = np.array([[
+        [0.5, 0.5, 0.4, 0.4],
+        [0.2, 0.2, 0.2, 0.2],
+    ]], dtype=np.float32)
+
+    logits = np.array([[
+        [5.0, 1.0],
+        [4.0, 0.5],
+    ]], dtype=np.float32)
+
+    # two small masks
+    masks = np.array([[
+        [[0, 1], [1, 0]],
+        [[1, 1], [0, 0]],
+    ]], dtype=np.uint8)
+
+    outputs = [boxes, logits, masks]
+
+    scores, labels, out_boxes, out_masks = model._post_process(
+        outputs,
+        origin_height=50,
+        origin_width=60,
+        confidence_threshold=0.5,
+        max_number_boxes=300,
+    )
+
+    assert len(scores) == 2
+    assert len(labels) == 2
+    assert out_boxes.shape == (2, 4)
+    assert out_masks is not None
+    assert out_masks.shape[0] == 2
+    assert out_masks.dtype == np.uint8
