@@ -153,3 +153,103 @@ def test_delete_file_from_bucket_returns_false_on_failure(monkeypatch):
         "my-bucket",
     )
     assert ok is False
+
+def test_get_gcs_client_returns_client(monkeypatch):
+    import core.utils as utils
+
+    monkeypatch.setattr(utils.storage, "Client", lambda: "CLIENT")
+
+    client = utils.get_gcs_client()
+
+    assert client == "CLIENT"
+
+def test_upload_file_to_bucket_handles_upload_exception(monkeypatch):
+    import core.utils as utils
+
+    monkeypatch.delenv("SKIP_CLOUD_UPLOAD", raising=False)
+
+    class FakeBlob:
+        def upload_from_file(self, *args, **kwargs):
+            raise Exception("upload fail")
+
+    class FakeBucket:
+        def blob(self, name):
+            return FakeBlob()
+
+    class FakeClient:
+        def bucket(self, name):
+            return FakeBucket()
+
+    monkeypatch.setattr(utils, "get_gcs_client", lambda: FakeClient())
+
+    class FakeFile:
+        name = "test.jpg"
+        content_type = "image/jpeg"
+
+    result = utils.upload_file_to_bucket(FakeFile(), "bucket")
+
+    assert result is None
+
+def test_upload_local_file_to_bucket_skips_when_env_set(monkeypatch):
+    import core.utils as utils
+
+    monkeypatch.setenv("SKIP_CLOUD_UPLOAD", "1")
+
+    result = utils.upload_local_file_to_bucket("file.jpg", "bucket")
+
+    assert result is None
+
+def test_upload_local_file_to_bucket_returns_none_when_client_init_fails(monkeypatch):
+    import core.utils as utils
+
+    monkeypatch.delenv("SKIP_CLOUD_UPLOAD", raising=False)
+    monkeypatch.setattr(utils.os.path, "isfile", lambda path: True)
+
+    def boom():
+        raise Exception("client init failed")
+
+    monkeypatch.setattr(utils, "get_gcs_client", boom)
+
+    result = utils.upload_local_file_to_bucket("file.jpg", "bucket")
+
+    assert result is None
+
+def test_upload_local_file_to_bucket_returns_none_when_upload_fails(monkeypatch):
+    import core.utils as utils
+
+    monkeypatch.delenv("SKIP_CLOUD_UPLOAD", raising=False)
+    monkeypatch.setattr(utils.os.path, "isfile", lambda path: True)
+
+    class FakeBlob:
+        def upload_from_filename(self, *args, **kwargs):
+            raise Exception("upload failed")
+
+    class FakeBucket:
+        def blob(self, name):
+            return FakeBlob()
+
+    class FakeClient:
+        def bucket(self, name):
+            return FakeBucket()
+
+    monkeypatch.setattr(utils, "get_gcs_client", lambda: FakeClient())
+
+    result = utils.upload_local_file_to_bucket("file.jpg", "bucket")
+
+    assert result is None
+
+
+def test_delete_file_from_bucket_returns_false_when_client_init_fails(monkeypatch):
+    import core.utils as utils
+
+    def boom():
+        raise Exception("client init failed")
+
+    monkeypatch.setattr(utils, "get_gcs_client", boom)
+
+    result = utils.delete_file_from_bucket(
+        "https://storage.googleapis.com/bucket/file.jpg",
+        "bucket",
+    )
+
+    assert result is False

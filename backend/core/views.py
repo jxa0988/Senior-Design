@@ -33,6 +33,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import BasePermission
 from django.contrib.auth import get_user_model
 from .utils import upload_file_to_bucket, upload_local_file_to_bucket, delete_file_from_bucket
+from rest_framework.exceptions import PermissionDenied
 
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -340,8 +341,7 @@ class HouseViewSet(viewsets.ModelViewSet):
         """Validate customer ownership and create the house record."""
         customer = serializer.validated_data["customer"]
         if customer.agent != self.request.user:
-            raise permissions.PermissionDenied(
-                "You do not own this customer.")
+            raise PermissionDenied("You do not own this customer.")
 
         serializer.save()
 

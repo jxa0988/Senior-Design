@@ -332,3 +332,187 @@ def test_post_process_with_masks(monkeypatch):
     assert out_masks is not None
     assert out_masks.shape[0] == 2
     assert out_masks.dtype == np.uint8
+
+def test_predict_calls_pipeline_correctly(monkeypatch):
+    class FakeInput:
+        name = "input"
+        shape = [1, 3, 64, 64]
+
+    class FakeSession:
+        def get_inputs(self):
+            return [FakeInput()]
+
+        def run(self, _, __):
+            return [np.zeros((1, 2, 4), dtype=np.float32)]
+
+    monkeypatch.setattr(mu.ort, "InferenceSession", lambda path: FakeSession())
+
+    model = mu.RFDETR_ONNX("fake.onnx")
+
+    fake_img = Image.new("RGB", (100, 200))
+    monkeypatch.setattr(mu, "open_image", lambda path: fake_img)
+    monkeypatch.setattr(model, "_preprocess", lambda img: "processed")
+    monkeypatch.setattr(
+        model,
+        "_post_process",
+        lambda outputs, h, w, t, m: ("scores", "labels", "boxes", "masks"),
+    )
+
+    result = model.predict("img.jpg", confidence_threshold=0.5)
+
+    assert result == ("scores", "labels", "boxes", "masks")
+
+def test_save_detections_without_masks_uses_default_font(monkeypatch, tmp_path):
+    class FakeInput:
+        shape = [1, 3, 64, 64]
+
+    class FakeSession:
+        def get_inputs(self):
+            return [FakeInput()]
+
+    monkeypatch.setattr(mu.ort, "InferenceSession", lambda path: FakeSession())
+    model = mu.RFDETR_ONNX("fake.onnx")
+
+    base_img = Image.new("RGB", (50, 50), color=(0, 0, 0))
+    monkeypatch.setattr(mu, "open_image", lambda path: base_img)
+
+    real_default_font = mu.ImageFont.load_default()
+
+    def fake_truetype(*args, **kwargs):
+        raise Exception("font missing")
+
+    monkeypatch.setattr(mu.ImageFont, "truetype", fake_truetype)
+    monkeypatch.setattr(mu.ImageFont, "load_default", lambda: real_default_font)
+
+    boxes = np.array([[5, 5, 20, 20]], dtype=np.float32)
+    labels = np.array([0], dtype=np.int64)
+
+    out_path = tmp_path / "out_no_masks.jpg"
+    model.save_detections("img.jpg", boxes, labels, None, out_path, class_names=None)
+
+    assert out_path.exists()
+
+def test_save_detections_with_masks_and_class_names(monkeypatch, tmp_path):
+    class FakeInput:
+        shape = [1, 3, 64, 64]
+
+    class FakeSession:
+        def get_inputs(self):
+            return [FakeInput()]
+
+    monkeypatch.setattr(mu.ort, "InferenceSession", lambda path: FakeSession())
+    model = mu.RFDETR_ONNX("fake.onnx")
+
+    base_img = Image.new("RGB", (60, 60), color=(10, 10, 10))
+    monkeypatch.setattr(mu, "open_image", lambda path: base_img)
+
+    boxes = np.array([[10, 10, 30, 30]], dtype=np.float32)
+    labels = np.array([1], dtype=np.int64)
+
+    masks = np.zeros((1, 60, 60), dtype=np.uint8)
+    masks[0, 10:30, 10:30] = 255
+
+    out_path = tmp_path / "out_with_masks.jpg"
+    model.save_detections(
+        "img.jpg",
+        boxes,
+        labels,
+        masks,
+        out_path,
+        class_names=["wind", "hail"],
+    )
+
+    assert out_path.exists()
+
+
+def test_tiled_inference_raises_when_overlap_too_large(monkeypatch):
+    fake_img = Image.new("RGB", (100, 100))
+    monkeypatch.setattr(mu, "open_image", lambda path: fake_img)
+
+    class FakeModel:
+        ort_session = None
+
+    with pytest.raises(ValueError, match="overlap too large"):
+        mu.run_rfdetr_inference_tiled(
+            FakeModel(),
+            "img.jpg",
+            tile_size=100,
+            overlap=1.0,  # makes step = 0
+        )
+
+
+def test_tiled_inference_returns_none_when_no_detections(monkeypatch):
+    fake_img = Image.new("RGB", (100, 100))
+    monkeypatch.setattr(mu, "open_image", lambda path: fake_img)
+
+    class FakeInput:
+        name = "input"
+
+    class FakeSession:
+        def get_inputs(self):
+            return [FakeInput()]
+
+        def run(self, _, __):
+            return ["fake"]
+
+    class FakeModel:
+        def __init__(self):
+            self.ort_session = FakeSession()
+
+        def _preprocess(self, tile):
+            return "processed"
+
+        def _post_process(self, *args, **kwargs):
+            return None, None, None, None  # triggers continue
+
+    dets, path = mu.run_rfdetr_inference_tiled(
+        FakeModel(),
+        "img.jpg",
+    )
+
+    assert dets is None
+    assert path is None
+
+
+def test_tiled_inference_success(monkeypatch, tmp_path):
+    fake_img = Image.new("RGB", (100, 100))
+    monkeypatch.setattr(mu, "open_image", lambda path: fake_img)
+
+    class FakeInput:
+        name = "input"
+
+    class FakeSession:
+        def get_inputs(self):
+            return [FakeInput()]
+
+        def run(self, _, __):
+            return ["fake"]
+
+    class FakeModel:
+        def __init__(self):
+            self.ort_session = FakeSession()
+
+        def _preprocess(self, tile):
+            return "processed"
+
+        def _post_process(self, *args, **kwargs):
+            scores = np.array([0.9], dtype=np.float32)
+            labels = np.array([1], dtype=np.int64)
+            boxes = np.array([[1.0, 2.0, 3.0, 4.0]], dtype=np.float32)
+            return scores, labels, boxes, None
+
+        def save_detections(self, *args, **kwargs):
+            save_path = args[4]
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            save_path.write_bytes(b"fake")
+
+    dets, path = mu.run_rfdetr_inference_tiled(
+        FakeModel(),
+        "img.jpg",
+        save_dir=str(tmp_path),
+    )
+
+    assert isinstance(dets, dict)
+    assert dets["scores"] == pytest.approx([0.9])
+    assert dets["labels"] == [1]
+    assert isinstance(path, str)
