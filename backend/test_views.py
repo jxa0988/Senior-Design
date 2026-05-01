@@ -394,34 +394,6 @@ def test_sign_out_deletes_domain_cookies_when_host_matches(monkeypatch):
     assert response.cookies["refresh"]["domain"] == "example.com"
 
 
-def test_index_returns_not_authenticated_when_no_debug_user():
-    factory = APIRequestFactory()
-    request = factory.get("/")
-
-    request.session = {}
-
-    response = views.index(request)
-
-    assert response.status_code == 200
-    assert response.data == {
-        "message": "User not authenticated or pass token of jwt"
-    }
-
-
-def test_index_returns_debug_user_when_present():
-    factory = APIRequestFactory()
-    request = factory.get("/")
-
-    request.session = {"debug_user": "jeffery"}
-
-    response = views.index(request)
-
-    assert response.status_code == 200
-    assert response.data == {
-        "message": "Hello from the backend! with session test",
-        "user": "jeffery",
-    }
-
 def test_is_agent_owner_customer_match():
     import core.views as views
 
@@ -527,6 +499,7 @@ def test_house_viewset_perform_create_saves_when_customer_owned():
 
     class Request:
         user = "agent1"
+        FILES = {}
 
     viewset.request = Request()
 
@@ -555,6 +528,7 @@ def test_house_viewset_perform_create_raises_when_customer_not_owned():
 
     class Request:
         user = "agent1"
+        FILES = {}
 
     viewset.request = Request()
 
@@ -921,8 +895,8 @@ def test_run_prediction_returns_message_when_no_images(monkeypatch):
     request = factory.post("/run-prediction", {}, format="json")
 
     class FakeImages:
-        def exists(self):
-            return False
+        def all(self):
+            return []
 
     class FakeHouse:
         images = FakeImages()

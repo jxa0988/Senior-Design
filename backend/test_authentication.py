@@ -1,5 +1,6 @@
 import pytest
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.exceptions import InvalidToken
 from core.authentication import CookieJWTAuthentication
 
 
@@ -34,7 +35,7 @@ def test_authenticate_raises_when_token_invalid(monkeypatch):
     request = DummyRequest(cookies={"access": "bad_token"})
 
     def fake_get_validated_token(token):
-        raise Exception("invalid token")
+        raise InvalidToken("invalid token")
 
     monkeypatch.setattr(auth, "get_validated_token", fake_get_validated_token)
 
