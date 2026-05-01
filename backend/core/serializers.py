@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import Customer, House, HouseImage, AgentCustomerLog
 
-# this serializer file defines serializers for the models, meaning that it converts model instances to JSON and vice versa
+# this serializer file defines serializers for the models, meaning that it converts model instances to JSON and vice versa, which is rules for how data is sent and received through the API. It also includes some custom validation and logic for handling file uploads and restricting querysets based on the current user, ensuring that agents can only access their own customers and houses.
 
 
 class HouseImageSerializer(serializers.ModelSerializer):
@@ -33,22 +33,25 @@ class HouseImageSerializer(serializers.ModelSerializer):
 
 class HouseSerializer(serializers.ModelSerializer):
     images = HouseImageSerializer(many=True, read_only=True)
+    default_image = serializers.ImageField(write_only=True)
+
     roof_type_list = [
         ("Asphalt Shingles", "Asphalt Shingles"),
+        ("Slate Shingles", "Slate Shingles"),
         ("Metal", "Metal"),
         ("Clay Tiles", "Clay Tiles"),
         ("Synthetic/Composite", "Synthetic/Composite"),
-        ('Wood shakes', 'Wood shakes'),
-        ("TPO/PVC", "TPO/PVC"),
+        ('Wood', 'Wood'),
         ("Other", "Other"),
     ]
     roof_type = serializers.ChoiceField(
         choices=roof_type_list, allow_blank=False, required=True
     )
+
     class Meta:
         model = House
         fields = ["id", "customer", "address",
-                  "roof_type", "severity", "damage_types", "description", "created_at", "images"]
+                  "roof_type", "severity", "damage_types", "description", "created_at", "images", "price_estimate", "default_image"]
         read_only_fields = ["id", "created_at", "images"]
 
     def __init__(self, *args, **kwargs):
@@ -60,6 +63,12 @@ class HouseSerializer(serializers.ModelSerializer):
             self.fields["customer"].queryset = Customer.objects.filter(
                 agent=request.user
             )
+
+    def create(self, validated_data):
+        validated_data.pop("default_image", None)  # remove non-model field
+        return super().create(validated_data)
+
+    # def validate(self, address):
 
 
 class CustomerSerializer(serializers.ModelSerializer):

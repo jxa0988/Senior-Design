@@ -3,6 +3,10 @@ import uuid
 import os
 from typing import Optional
 
+"""
+Serve as a utility module for handling Google Cloud Storage (GCS) interactions, including uploading and deleting files. This module abstracts away the complexities of GCS operations, providing simple functions to upload files from both file-like objects and local file paths, as well as a function to delete files from a GCS bucket. It also includes error handling and logging to ensure that any issues during these operations are properly reported.
+"""
+
 
 def get_gcs_client() -> storage.Client:
     """

@@ -18,6 +18,7 @@ urlpatterns = [
     path("sign-out/", views.sign_out, name="sign_out"),
     path("login/google/modal/", views.google_login_modal,
          name="google_login_modal"),
+    path("csrf/", views.get_csrf, name="get_csrf"),
     path("v1/houses/<int:house_id>/predict/",
          views.run_prediction, name="run_prediction"),
     path("houses/<int:house_id>/run_prediction/",

@@ -1,8 +1,8 @@
-from django.contrib.auth.models import User
 from django.utils.deprecation import MiddlewareMixin
 from django.conf import settings
 from django.contrib.auth import get_user_model
 import jwt
+
 
 class DebugSessionUserMiddleware:
     def __init__(self, get_response):
@@ -24,11 +24,12 @@ class DebugSessionUserMiddleware:
 
 User = get_user_model()
 
+
 class JWTAuthMiddleware(MiddlewareMixin):
     def process_request(self, request):
 
         token = request.COOKIES.get("access")
-        
+
         if not token:
             return
 

@@ -1,9 +1,10 @@
 from pathlib import Path
 import tempfile
 import requests
-# from huggingface_hub import hf_hub_download
 
 from .model_utils import RFDETR_ONNX, run_rfdetr_inference, run_rfdetr_inference_tiled
+
+# This service class encapsulates the loading and inference logic for the RFDETR model through OnnxRuntime. It provides a clean interface for making predictions on images, whether they are local files or accessible via URLs. The class handles model loading, image downloading, and inference execution, abstracting away the complexities of these operations from the rest of the application.
 
 
 class RFDETRService:

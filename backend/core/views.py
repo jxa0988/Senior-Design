@@ -16,15 +16,15 @@ from .serializers import (
 )
 import traceback
 import os
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, redirect
 from django.conf import settings
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from google.oauth2 import id_token
 from google.auth.transport import requests
 from rest_framework.response import Response
-from django.contrib.auth.models import User
 from rest_framework import viewsets, permissions
+from rest_framework.exceptions import PermissionDenied
 from .authentication import CookieJWTAuthentication
 
 from .models import AgentCustomerLog, HouseImage, House, Customer
@@ -36,8 +36,19 @@ from .utils import upload_file_to_bucket, upload_local_file_to_bucket, delete_fi
 from rest_framework.exceptions import PermissionDenied
 
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 User = get_user_model()
+
+
+@ensure_csrf_cookie
+def get_csrf(request):
+    """Endpoint to set a CSRF cookie for frontend clients.
+
+    This can be used by the React app to obtain a CSRF token for subsequent
+    requests. The presence of the cookie can also be used as a simple check
+    that the backend is reachable.
+    """
+    return JsonResponse({"status": "ok"})
 
 
 def _delete_existing_prediction(img):
@@ -80,7 +91,7 @@ def _run_prediction_for_image(img, mode: str, threshold: float, tile_size: int):
         img.predicted_url = predicted_url
         img.predicted_at = timezone.now()
         img.detections = detections
-        img.save(update_fields=["predicted_url", "predicted_at","detections"])
+        img.save(update_fields=["predicted_url", "predicted_at", "detections"])
 
     try:
         if pred_path and os.path.exists(pred_path):
@@ -107,7 +118,8 @@ class DebugOrJWTAuthenticated(BasePermission):
 
     def has_permission(self, request, view):
         """Return True if the request is from a debug session or JWT user."""
-        if "debug_user" in request.session:
+        sess = getattr(request, "session", None)
+        if sess and "debug_user" in sess:
             return True
         return request.user and request.user.is_authenticated
 
@@ -153,10 +165,12 @@ def auth_receive(request):
 
     token = request.data.get("credential")
     if not token:
-        print(token)
+        # print(token)
         return Response({"error": "Missing credential"}, status=400)
 
     try:
+        # print("Verifying Google ID token...")
+
         user_data = id_token.verify_oauth2_token(
             token,
             requests.Request(),
@@ -166,7 +180,19 @@ def auth_receive(request):
         print("Invalid token", token)
         return Response({"error": "Invalid token."}, status=400)
 
-    user, created = User.objects.get_or_create(
+    # if not email:
+    #     return Response({"error": "Missing email from Google token."}, status=400)
+
+    # # Optional but recommended
+    # if not user_data.get("email_verified", False):
+    #     return Response({"error": "Email is not verified by Google."}, status=403)
+
+    # # Exact domain match
+    # domain = email.rsplit("@", 1)[-1] if "@" in email else ""
+    # if domain != "statefarm.com":
+    #     return Response({"error": "Unauthorized email domain."}, status=403)
+
+    user, _ = User.objects.get_or_create(
         email=user_data["email"],
         defaults={
             "username": user_data["email"],
@@ -175,8 +201,9 @@ def auth_receive(request):
     )
 
     refresh = RefreshToken.for_user(user)
+    # print("Google authentication successful for:", user.email,
+    #       "Created new user:", created, "Refresh token:", str(refresh))
 
-    # print("User authenticated:", user.email, "Created:", created)
     # -----------------------------
     # REDIRECT TO FRONTEND (configurable)
     # -----------------------------
@@ -239,22 +266,6 @@ def sign_out(request):
         response.delete_cookie("access", **delete_kwargs_domain)
         response.delete_cookie("refresh", **delete_kwargs_domain)
     return response
-
-
-@api_view(["GET"])
-@permission_classes([AllowAny])
-def index(request):
-    """Simple health/auth check endpoint.
-
-    If `debug_user` is present in the session, returns a greeting payload
-    with that user. Otherwise returns a not-authenticated message.
-    """
-    if "debug_user" in request.session:
-        user = request.session.get("debug_user")
-    else:
-        user = None
-        return Response({"message": "User not authenticated or pass token of jwt"})
-    return Response({"message": "Hello from the backend! with session test", "user": user})
 
 
 class AgentCustomerLogViewSet(viewsets.ReadOnlyModelViewSet):
@@ -323,15 +334,25 @@ class CustomerViewSet(viewsets.ModelViewSet):
         serializer.save(agent=self.request.user)
 
     # update
+    def perform_update(self, serializer):
+        """Validate agent ownership on update."""
+        if serializer.instance.agent != self.request.user:
+            raise PermissionDenied("You do not own this customer.")
+        serializer.save()
+
     # delete
+    def destroy(self, request, *args, **kwargs):
+        """Delete a Customer instance."""
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response(status=204)
 
 
 class HouseViewSet(viewsets.ModelViewSet):
     """CRUD endpoints for houses belonging to the agent's customers."""
     queryset = House.objects.all()
     serializer_class = HouseSerializer
-    permission_classes = [DebugOrJWTAuthenticated,
-                          IsAgentOwner]
+    permission_classes = [DebugOrJWTAuthenticated, IsAgentOwner]
 
     def get_queryset(self):
         """Limit to houses whose customers are owned by the agent."""
@@ -343,18 +364,37 @@ class HouseViewSet(viewsets.ModelViewSet):
         if customer.agent != self.request.user:
             raise PermissionDenied("You do not own this customer.")
 
+        house_img = self.request.FILES.get("default_image")
+        if house_img:
+            url = upload_file_to_bucket(
+                house_img, bucket_name=os.getenv("BUCKET_NAME")
+            )
+
+            if not url:
+                raise Exception("Failed to upload image")
+
+            serializer.save(default_image=url)
+        else:
+            serializer.save()
+
+    def perform_update(self, serializer):
+        """Validate customer ownership on update as well."""
+        customer = serializer.validated_data.get(
+            "customer", serializer.instance.customer
+        )
+        if customer.agent != self.request.user:
+            raise PermissionDenied("You do not own this customer.")
+
         serializer.save()
 
     def destroy(self, request, *args, **kwargs):
         """Delete a House instance."""
         instance = self.get_object()
+        bucket_name = os.getenv("BUCKET_NAME")
         images = instance.images.all()
         for img in images:
-            bucket_name = os.getenv("BUCKET_NAME")
-            # Delete the file from cloud storage
             if img.image_url:
                 try:
-                    # Assuming the function to delete a file from the bucket is defined
                     delete_file_from_bucket(img.image_url, bucket_name)
                 except Exception as e:
                     print(f"[WARN] Failed to delete file from bucket: {e}")
@@ -406,6 +446,14 @@ class HouseImageViewSet(viewsets.ModelViewSet):
             raise Exception("Failed to upload image")
 
         serializer.save(image_url=url)
+
+    def perform_update(self, serializer):
+        """
+        On update, if a new file is provided, delete the old one from storage and upload the new one.
+        """
+        self.destroy(self.request, pk=serializer.instance.pk)
+        self.perform_create(serializer)
+        # serializer.save()
 
 
 def redirect_404(request, exception):
@@ -469,12 +517,13 @@ def run_prediction(request, house_id):
     except House.DoesNotExist:
         return Response({"error": "House not found"}, status=404)
 
-    if not house.images.exists():
+    house_images = list(house.images.all())
+    if not house_images:
         return Response({"message": "No images found for this house."})
 
     if request.method == "GET":
-        # print("[INFO] house images:     ", house.images.all())
-        return render(request, "backend/run_prediction.html", {"house_id": house_id, "images": house.images.all(), "local_dev": settings.DEBUG})
+        # print("[INFO] house images:     ", house_images)
+        return render(request, "backend/run_prediction.html", {"house_id": house_id, "images": house_images, "local_dev": settings.DEBUG})
 
     mode = request.data.get("mode", "normal")
     threshold = float(request.data.get("threshold", 0.4))
@@ -483,7 +532,7 @@ def run_prediction(request, house_id):
         f"[INFO] Running prediction for house {house_id} with mode={mode}, threshold={threshold}, tile_size={tile_size}")
     results = []
 
-    for img in house.images.all():
+    for img in house_images:
         try:
             results.append(
                 _run_prediction_for_image(img, mode, threshold, tile_size)

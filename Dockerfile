@@ -29,7 +29,7 @@ WORKDIR /app/backend
 # copy entrypoint script
 COPY entry.bash /entry.bash
 
-COPY backend/exported_models /app/backend/exported_models
+COPY /backend/exported_models /app/backend/exported_models
 
 RUN chmod +x /entry.bash \
     && sed -i 's/\r$//' /entry.bash

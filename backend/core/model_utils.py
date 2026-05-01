@@ -122,7 +122,7 @@ class RFDETR_ONNX:
         input_image = self._preprocess(image)
         input_name = self.ort_session.get_inputs()[0].name
         outputs = self.ort_session.run(None, {input_name: input_image})
-        print([o.shape for o in outputs])
+        # print([o.shape for o in outputs])
         return self._post_process(outputs, origin_height, origin_width, confidence_threshold, max_number_boxes)
 
     def save_detections(self, image_path: str, boxes, labels, masks, save_image_path: Path, class_names=None):
@@ -197,6 +197,7 @@ def run_rfdetr_inference(model: RFDETR_ONNX, image_path: str, class_names=None, 
         "labels": labels.tolist(),
         "boxes": boxes.tolist(),
     }
+
     return detections, str(save_path)
 
 

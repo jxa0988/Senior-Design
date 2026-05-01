@@ -3,6 +3,8 @@ from django.db import models
 from phonenumber_field.modelfields import PhoneNumberField
 # uv run python manage.py graph_models -a -g -o erd.png
 #  to visualize the ERD
+
+
 class Customer(models.Model):
     agent = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -28,8 +30,11 @@ class House(models.Model):
     roof_type = models.CharField(max_length=100, blank=True, null=True)
     severity = models.IntegerField(blank=True, null=True)
     damage_types = models.JSONField(blank=True, null=True)
+    price_estimate = models.DecimalField(
+        max_digits=12, decimal_places=2, blank=True, null=True)
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    default_image = models.URLField(blank=True, null=True)
 
     def __str__(self):
         return f"House at {self.address} for {self.customer.name}"
